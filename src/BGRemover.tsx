@@ -16,11 +16,14 @@ import {
 const BGRemoverPro = () => {
   const [originalImage, setOriginalImage] = useState(null);
   const [processedImage, setProcessedImage] = useState(null);
+  const [borderedImage, setBorderedImage] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [borderColor, setBorderColor] = useState('#000000');
   const [borderThickness, setBorderThickness] = useState(5);
   const [isDragging, setIsDragging] = useState(false);
-  
+  const [originalFilename, setOriginalFilename] = useState("")
+  const [processedBlob, setProcessedBlob] = useState(null); 
+
   const fileInputRef = useRef(null);
   const processedImageRef = useRef(null);
   
@@ -58,6 +61,7 @@ const BGRemoverPro = () => {
     if (files.length === 0) return;
     
     const file = files[0];
+    setOriginalFilename(file.name);
     
     // Check if file is an image
     if (!file.type.match('image.*')) {
@@ -81,17 +85,40 @@ const BGRemoverPro = () => {
     reader.readAsDataURL(file);
   };
   
-  const processImage = (imageData) => {
+  const processImage = async(imageData) => {
     setIsProcessing(true);
-    
-    // In a real app, this would send to your backend for processing
-    // Here we just simulate with a timeout
-    setTimeout(() => {
-      // For demo purposes, we'll just use the same image
-      // In reality, you would have your background removal logic here
-      setProcessedImage(imageData);
+
+    try {
+      // Convert base64 DataURL to Blob
+      const blob = await (await fetch(imageData)).blob();
+      
+      // Create FormData and append the image
+      const formData = new FormData();
+      formData.append('image', blob, originalFilename);
+
+      // Send POST request to Flask API
+      const response = await fetch('http://localhost:5000/remove-bg', {
+        method: 'POST',
+        body: formData,
+      });
+  
+      if (!response.ok) {
+        throw new Error('Background removal failed.');
+      }
+  
+      // Read response as Blob (PNG with transparency)
+      const resultBlob = await response.blob();
+      setProcessedBlob(resultBlob);  
+      // Convert Blob to object URL to display in <img />
+      const resultUrl = URL.createObjectURL(resultBlob);
+  
+      setProcessedImage(resultUrl);
+    } catch (error) {
+      console.error('Error processing image:', error);
+      alert('Failed to remove background');
+    } finally {
       setIsProcessing(false);
-    }, 2000);
+    }
   };
   
   const handleBorderColorChange = (e) => {
@@ -108,19 +135,43 @@ const BGRemoverPro = () => {
     setBorderThickness(e.target.value);
   };
   
-  const applyBorder = () => {
+  const applyBorder = async() => {
     if (!processedImage) return;
     
     setIsProcessing(true);
-    
-    // In a real app, this would send to your backend for processing
-    // Here we just simulate with a timeout
-    setTimeout(() => {
-      if (processedImageRef.current) {
-        processedImageRef.current.style.border = `${borderThickness}px solid ${borderColor}`;
+
+    try {
+      // Convert base64 DataURL to Blob
+      
+      // Create FormData and append the image
+      const formData = new FormData();
+      formData.append('image', processedBlob, originalFilename);
+      formData.append('border_thickness', borderThickness);
+      formData.append('border_color', borderColor);
+      // Send POST request to Flask API
+      const response = await fetch('http://localhost:5000/add-border', {
+        method: 'POST',
+        body: formData,
+      });
+  
+      if (!response.ok) {
+        throw new Error('Adding border failed.');
       }
+  
+      // Read response as Blob (PNG with transparency)
+      const resultBlob = await response.blob();
+  
+      // Convert Blob to object URL to display in <img />
+      const resultUrl = URL.createObjectURL(resultBlob);
+  
+      setBorderedImage(resultUrl);
+      setProcessedImage(resultUrl);
+    } catch (error) {
+      console.error('Error processing image:', error);
+      alert('Failed to remove background');
+    } finally {
       setIsProcessing(false);
-    }, 1000);
+    }
   };
   
   const downloadImage = () => {
@@ -136,6 +187,8 @@ const BGRemoverPro = () => {
   };
 
   return (
+    <>
+
     <div className="app-wrapper">
       <div className="container">
         {/* Main Content */}
@@ -307,6 +360,8 @@ const BGRemoverPro = () => {
         </div>
       </div>
     </div>
+    </>
+
   );
 };
 
